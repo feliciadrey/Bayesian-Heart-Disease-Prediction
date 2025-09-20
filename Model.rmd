@@ -328,3 +328,4 @@ There's a clear difference between the posterior predictive distribution and the
 
 A pvalue of 0.0096 indicates a problem with the model. It suggests that the model is unable to predict the observed data well, and the data are unusual or extreme in the context of the model’s predictions. A low p-value could signal a poor fit, model misspecification, or that important factors are missing in the model.
 
+
