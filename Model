@@ -1,13 +1,11 @@
 ---
-title: "GSLC 2 Bayesian Data Analysis - Mini Project"
+title: "Bayesian Data Analysis - Mini Project"
 author: "Kelompok 1"
 date: "2024-11-20"
 output: html_document
 ---
 
 # Mini Project Bayesian Data Analysis
-
-**LB09 / Kelompok 1**
 
 ## Importing Libraries Used and Dataset
 
@@ -329,3 +327,4 @@ pval
 There's a clear difference between the posterior predictive distribution and the observed data. The model's posterior distribution predicts a lower proportion of 1s (peaking around 0.1-0.2), while the observed proportion of 1s in the data is approximately 0.6, as indicated by the red line. The low p-value (0.0096) further highlights that the observed proportion is highly unlikely under the model's predictions, suggesting a potential misfit.
 
 A pvalue of 0.0096 indicates a problem with the model. It suggests that the model is unable to predict the observed data well, and the data are unusual or extreme in the context of the model’s predictions. A low p-value could signal a poor fit, model misspecification, or that important factors are missing in the model.
+
