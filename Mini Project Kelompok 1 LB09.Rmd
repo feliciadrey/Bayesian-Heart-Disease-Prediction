@@ -1,0 +1,331 @@
+---
+title: "GSLC 2 Bayesian Data Analysis - Mini Project"
+author: "Kelompok 1"
+date: "2024-11-20"
+output: html_document
+---
+
+# Mini Project Bayesian Data Analysis
+
+**LB09 / Kelompok 1**
+
+## Importing Libraries Used and Dataset
+
+```{r}
+library(rjags)
+library(geoR)
+library(brms)
+library(loo)
+```
+
+```{r}
+df <- read.csv('heart-disease.csv', header=T, sep = ',')
+head(df)
+Y <- df[,14]
+X <- scale(df[,1:13])
+n <- length(Y)
+```
+
+## Model 1: Uninformative Priors Logistic Regression Model
+
+```{r}
+burn <- 1000 
+iters <- 5000 
+chains <- 2
+```
+
+```{r}
+uninformative_model <- textConnection("model{ 
+            for(i in 1:n){ 
+                  Y[i] ~ dbern(pi[i]) 
+                  logit(pi[i]) <- beta[1] + X[i,1]*beta[2] + X[i,2]*beta[3] + 
+                  X[i,3]*beta[4] + X[i,4]*beta[5] + X[i,5]*beta[6] + 
+                  X[i,6]*beta[7] + X[i,7]*beta[8] + X[i,8]*beta[9] + 
+                  X[i,9]*beta[10] + X[i,10]*beta[11] + X[i,11]*beta[12] + 
+                  X[i,12]*beta[13] + X[i,13]*beta[14]
+                      } 
+            for(j in 1:14){
+                beta[j] ~ dnorm(0,0.01)
+            } 
+}")
+```
+
+```{r}
+data <- list(Y=Y,X=X,n=n) 
+model1 <- jags.model(uninformative_model,data=data, n.chains = chains,quiet=TRUE) 
+update(model1, burn, progress.bar="none") 
+samps1 <- coda.samples(model1,variable.names=c("beta"),n.iter = iters,n.thin=5) 
+summary(samps1)
+```
+
+## Convergence Diagnostics for Model 1
+
+```{r}
+par(mar = c(4, 4, 2, 2))
+plot(samps1)
+```
+
+The trace plots of all features appear stable, with the samples fluctuating around a consistent mean. This suggests that the MCMC chain for all features have likely converged.
+
+```{r}
+autocorr(samps1[[1]],lag=1) 
+```
+
+Autocorrelation score of all features are near 0, indicating good mixing, meaning there is no prolonged periods where the values are stuck in one region.
+
+```{r}
+effectiveSize(samps1) 
+```
+
+Samples are effectively independent and have likely converged because all features has a high ESS.
+
+```{r}
+gelman.diag(samps1)
+```
+
+PSRF value for all features are 1, which is less than 1.1, indicating that the MCMC chains have likely converged to the target posterior distribution.
+
+```{r}
+for(i in seq_along(samps1)){
+  print(geweke.diag(samps1[[i]]))
+}
+```
+
+\|z\| for all features are less than 2 indicating good convergence.
+
+## Model 2: Informative Priors Logistic Regression Model
+
+All log odds ratios and log credible intervals for informative priors of features are straightly derived or calculated from published journals. All calculations are explained in the report file. However, further calculation is needed to improve the model.
+
+```{r}
+#Reverse encode the sex gender (female 1, male 0)
+df$sex <- ifelse(df$sex == 1, 0, 1)
+```
+
+```{r}
+#Log Odds ratios and log confidence intervals for all features (from manual calculation)
+feature_data <- data.frame(
+  feature = c("age", "sex", "trestbps", "chol", "fbs"),
+  odds_ratio = c(-0.6405, -0.116, 1.242, 0.507, 0.466),
+  lower_ci = c(-0.786, -0.174, 2.61 ,0.255, 0.003 ), 
+  upper_ci = c(-0.514 , -0.041, 3.24, 0.765, 0.929)
+)
+
+#Calculate prior parameters for all features
+calculate_priors <- function(data) {
+  data$sigma <- (data$upper_ci - data$lower_ci) / (2 * 1.96)
+  data$precision <- 1 / (data$sigma^2)
+  
+  return(data[, c("feature", "odds_ratio", "precision")])
+}
+
+#Priors for all features
+priors <- calculate_priors(feature_data)
+print(priors)
+
+informative_model <- textConnection("model{
+  for(i in 1:n){
+            Y[i] ~ dbern(pi[i])
+            logit(pi[i]) <- beta[1] + 
+                            X[i,1]*beta[2] + X[i,2]*beta[3] + X[i,3]*beta[4] + 
+                            X[i,4]*beta[5] + X[i,5]*beta[6] + X[i,6]*beta[7] + 
+                            X[i,7]*beta[8] + X[i,8]*beta[9] + X[i,9]*beta[10] + 
+                            X[i,10]*beta[11] + X[i,11]*beta[12] + X[i,12]*beta[13] + 
+                            X[i,13]*beta[14]
+  }
+          #informative
+          beta[1] ~ dnorm(0, 0.01)                    # Intercept
+          beta[2] ~ dnorm(-0.6405	, 207.69896)        # Age
+          beta[3] ~ dnorm(-0.1160	, 868.69806)        # Sex
+          beta[5] ~ dnorm(1.2420, 38.71605)           # BP
+          beta[6] ~ dnorm(0.507, 59.07882)            # Cholesterol
+          beta[7] ~ dnorm(0.4660	, 17.92050)         # fbs
+          
+          #uninnformative
+          beta[4] ~ dnorm(0, 0.01)                    # cp
+          for(j in 8:14){beta[j] ~ dnorm(0, 0.01)}    # Uninformative for others
+}")
+```
+
+```{r}
+burn <- 1000
+iters <- 5000
+chains <- 2
+```
+
+```{r}
+model2 <- jags.model(informative_model, data=data, n.chains=chains, quiet=TRUE)
+update(model2, burn, progress.bar="none")
+samps2 <- coda.samples(model2, variable.names=c("beta"), n.iter=iters, n.thin=5)
+```
+
+```{r}
+summary(samps2)
+```
+
+## Convergence Diagnostics for Model 2
+
+```{r}
+par(mar = c(4, 4, 2, 2))
+plot(samps2)
+```
+
+The trace plots of all features appear stable, with the samples fluctuating around a consistent mean. This suggests that the MCMC chain for all features have likely converged.
+
+```{r}
+autocorr(samps2[[1]],lag=1) 
+```
+
+Autocorrelation score of all features are near 0, indicating good mixing, meaning there is no prolonged periods where the values are stuck in one region.
+
+```{r}
+effectiveSize(samps2) 
+```
+
+Samples are effectively independent and have likely converged because all features has a high ESS.
+
+```{r}
+gelman.diag(samps2) 
+```
+
+PSRF value for all features are 1, which is less than 1.1, indicating that the MCMC chains have likely converged to the target posterior distribution.
+
+```{r}
+for(i in seq_along(samps2)){
+  print(geweke.diag(samps2[[i]])) 
+}
+```
+
+\|z\| for all features are less than 2 indicating good convergence.
+
+## Comparing model1 and model2 using **Bayes’ factor and two information criteria**
+
+### Bayes Factors
+
+```{r}
+#fit model1
+mod1 <- brm(target | trials(target) ~ 1, data = df, family = binomial())
+#fit model2
+mod2 <- brm(target | trials(target) ~ age + sex + cp + trestbps + chol + fbs + restecg + thalach + exang + oldpeak + slope + ca + thal, data = df, family = binomial())
+
+loo_model1 <- loo(mod1)
+loo_model2 <- loo(mod2)
+
+print(loo_model1)
+print(loo_model2)
+
+loo_comparison <- loo_compare(loo_model1, loo_model2)
+print(loo_comparison)
+```
+
+```{r}
+elpd_1 <- -0.4
+elpd_2 <- -0.3
+delta_elpd <- elpd_1 - elpd_2
+bayes_factor <- exp(delta_elpd)
+bayes_factor
+```
+
+A Bayes factor \< 1 indicates that model2 is more strongly supported.
+
+### WAIC
+
+#### Model 1
+
+```{r}
+p <- ncol(X)+1
+```
+
+```{r}
+samps_like1 <- samps1[,1:p]
+like1 <- rbind(samps1[[1]],samps1[[2]])
+like1[like1 <= 0] <- 1e-6     #change negative values to 1e-6
+fbar1 <- colMeans(like1)
+Pw1 <- sum(apply(log(like1),2,var))
+WAIC1 <- -2*sum(log(fbar1))+2*Pw1
+WAIC1
+```
+
+#### Model 2
+
+```{r}
+p <- ncol(X)+1
+```
+
+```{r}
+samps_like2 <- samps2[,1:p]
+like2 <- rbind(samps2[[1]],samps2[[2]])
+like2[like2 <= 0] <- 1e-6     #change negative values to 1e-6
+fbar2 <- colMeans(like2)
+Pw2 <- sum(apply(log(like2),2,var))
+WAIC2 <- -2*sum(log(fbar2))+2*Pw2
+WAIC2
+```
+
+### Comparison
+
+```{r}
+criteria <- c("WAIC")
+model1 <- c(414.8723)
+model2 <- c(378.0674)
+
+comparison_table <- data.frame(
+  Criterion = criteria,
+  Model_1 = model1,
+  Model_2 = model2,
+  Difference = model2 - model1
+)
+
+print(comparison_table)
+```
+
+Model 2 has a lower score of WAIC compared to model 1, meaning model 2 has better predictive performance, as it balances fit to the data and model complexity.
+
+## Best Model Interpretation
+
+```{r}
+summary(samps2)
+```
+
+![](images/clipboard-329201018.png){width="630"}
+
+**Significant predictors (95% credible intervals do not include 0):** age, sex, cp, trestbps, chol, restecg, exang, slope, and thal
+
+**Interpretation:**
+
+-   A one-unit increase in resting bp, cholesterol, resting ECG, and slope of peak exercise increases the odds of having heart disease.
+
+-   A one-unit increase in age and number of major vessels decreases the odds of having heart disease.
+
+-   The odds of having heart disease for females are lower than for males.
+
+-   The odds of having heart disease for patients with higher chest pain types are higher than for patients with lower chest pain types.
+
+-   The odds of having heart disease for patients with exercise induced angina and higher thalassemia type are lower.
+
+## Posterior Predictive Checks
+
+```{r}
+D <- samps2[[1]]
+p_data <- mean(Y)  
+D0 <- c(p_data)    
+Dnames <- c("Proportion of 1s in Data")
+
+pval <- rep(0, 1)
+names(pval) <- Dnames
+
+for (j in 1:1) { 
+  posterior_density <- density(D[,j]) 
+  plot(posterior_density, xlim = c(0, 1), xlab = "Proportion of 1s", ylab = "Posterior Probability", main = Dnames[j])
+  abline(v = D0[j], col = 2)  
+  legend("topright", c("Model", "Data"), lty = 1, col = 1:2, bty = "n")
+  
+  pval[j] <- mean(D[,j] > D0[j])
+}
+
+pval
+```
+
+There's a clear difference between the posterior predictive distribution and the observed data. The model's posterior distribution predicts a lower proportion of 1s (peaking around 0.1-0.2), while the observed proportion of 1s in the data is approximately 0.6, as indicated by the red line. The low p-value (0.0096) further highlights that the observed proportion is highly unlikely under the model's predictions, suggesting a potential misfit.
+
+A pvalue of 0.0096 indicates a problem with the model. It suggests that the model is unable to predict the observed data well, and the data are unusual or extreme in the context of the model’s predictions. A low p-value could signal a poor fit, model misspecification, or that important factors are missing in the model.
